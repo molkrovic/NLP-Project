@@ -1,31 +1,53 @@
 import pandas as pd
+import re
+import pickle
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.metrics import classification_report
 
-# Cargar csv
-df = pd.read_csv('../data/raw/AB_NYC_2019.csv')
+url = 'https://raw.githubusercontent.com/4GeeksAcademy/NLP-project-tutorial/main/url_spam.csv'
 
-# Cambiar el tipo de las variables
-df['last_review'] = df['last_review'].astype('datetime64[ns]')
-df=df.astype({'name':'str','host_name':'str','neighbourhood_group':'category','neighbourhood':'category','room_type':'category'})
+df_raw = pd.read_csv(url)
 
-# Obtener el precio promedio (excluyendo los valores nulos) por zona y tipo de alojamiento
-df_precio_no_nulo = df[df['price'] > 0]
-df_precio_promedio = df_precio_no_nulo.groupby(['room_type','neighbourhood_group'])['price'].mean().sort_values(ascending=True)
-pd.DataFrame(df_precio_promedio).sort_values(by='room_type')
-dict_precios_promedio = df_precio_promedio.to_dict()
-dict_precios_promedio
+df = df_raw.copy()
 
-# Definir función para cambiar los precios nulos por el precio promedio por zona y tipo de alojamiento
-def precio_nulo_a_promedio(fila):
-	if fila['price'] > 0:
-		return fila['price']
-	else:
-		return dict_precios_promedio[fila['room_type'], fila['neighbourhood_group']]
+df.drop_duplicates()
 
-# Aplicar la función
-df['price'] = df.apply(precio_nulo_a_promedio, axis=1)
+df['url'] = df['url'].str.lower()
 
-# Cambiar los nan de reviews_per_month por 0
-df['reviews_per_month'] = df['reviews_per_month'].fillna(0)
+def eliminar_https(texto):
+    return re.sub(r'(https://www|https://)', '', texto)
 
-# Guardar csv
-df.to_csv('../data/processed/AB_NYC_2019_processed.csv')
+def caracteres_no_alfanumericos(texto):
+    return re.sub("(\\W)+"," ", texto)
+
+def esp_multiple(texto):
+    return re.sub(' +', ' ',texto)
+
+df['url_limpia'] = df['url'].apply(eliminar_https).apply(caracteres_no_alfanumericos).apply(esp_multiple)
+
+df['is_spam'] = df['is_spam'].apply(lambda x: 1 if x==True else 0)
+
+X = df['url_limpia']
+y = df['is_spam']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=12)
+
+vec = CountVectorizer()
+
+X_train = vec.fit_transform(X_train).toarray()
+X_test = vec.transform(X_test).toarray()
+
+classifier_hp = SVC(C=10, gamma=0.1, random_state=1234)
+
+classifier_hp.fit(X_train, y_train)
+
+filename = '../models/modelo_NLP.sav'
+pickle.dump(classifier_hp, open(filename, 'wb'))
+print('Se guardó el modelo.')
+print()
+
+predictions_hp = classifier_hp.predict(X_test)
+print('Métricas:')
+print(classification_report(y_test, predictions_hp))
