@@ -29,6 +29,10 @@ df['url_limpia'] = df['url'].apply(eliminar_https).apply(caracteres_no_alfanumer
 
 df['is_spam'] = df['is_spam'].apply(lambda x: 1 if x==True else 0)
 
+df.to_csv('../data/processed/df_processed.csv')
+print('Se guardó el csv procesado.')
+print()
+
 X = df['url_limpia']
 y = df['is_spam']
 
